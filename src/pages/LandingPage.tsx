@@ -67,7 +67,7 @@ export const LandingPage: React.FC = () => {
             </Link>
           ) : (
             <Link
-              to="/login"
+              to="/login?next=/app"
               className="px-5 py-2.5 rounded-xl bg-[#c05c3c] text-white text-sm font-semibold hover:bg-[#a74728] shadow-sm transition active:scale-[0.98]"
             >
               Start Learning

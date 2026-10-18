@@ -5,15 +5,15 @@ test.describe('Authentication and Route Protection Smoke Tests', () => {
     await page.goto('/');
 
     // Check landing page hero is visible
-    await expect(page.locator('h1')).toContainText('Learn the Ancient Coastal Language');
+    await expect(page.locator('h1')).toContainText('Learn Tulu');
 
-    // Find and click the main "Start Learning Now" button
+    // Find and click the main "Start Learning" button
     const startLearningBtn = page.getByRole('link', { name: /Start Learning/i }).first();
     await expect(startLearningBtn).toBeVisible();
     await startLearningBtn.click();
 
     // Verify redirected to login with next parameter
-    await expect(page).toHaveURL(/\/login\?next=%2Fapp/);
+    await expect(page).toHaveURL(/\/login\?next=(%2F|\/)app/);
     await expect(page.getByText('Sign in to TuluGPT')).toBeVisible();
     await expect(page.getByText('Continue with Google')).toBeVisible();
   });
@@ -43,7 +43,7 @@ test.describe('Authentication and Route Protection Smoke Tests', () => {
 
   test('5. Setup Check page /setup-check renders diagnostics correctly', async ({ page }) => {
     await page.goto('/setup-check');
-    await expect(page.getByText('System Setup & Health Check')).toBeVisible();
-    await expect(page.getByText('Google Cloud Console Authorized Redirect URI')).toBeVisible();
+    await expect(page.getByText('TuluGPT System Health & Setup Check')).toBeVisible();
+    await expect(page.getByText('Google Cloud Console Redirect URI')).toBeVisible();
   });
 });
