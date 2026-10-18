@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import { Lesson, VocabularyItem } from '../types';
 import { VERIFIED_VOCABULARY } from '../data/verified_vocabulary';
-import { LocalStore } from '../services/storage';
 
 interface LessonPlayerPageProps {
   lesson: Lesson;

@@ -1,29 +1,37 @@
 import React from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { 
   Sparkles, 
   BookOpen, 
   MessageSquare, 
   GraduationCap, 
-  ShieldCheck, 
   ArrowRight, 
-  Compass, 
-  Flame, 
-  Volume2, 
-  Heart,
-  ChevronRight
+  ChevronRight,
+  ShieldCheck,
+  CheckCircle2
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
-interface LandingPageProps {
-  onStartLearning: () => void;
-  onExploreCurriculum: () => void;
-  onQuickStart: () => void;
-}
+export const LandingPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
 
-export const LandingPage: React.FC<LandingPageProps> = ({ 
-  onStartLearning, 
-  onExploreCurriculum,
-  onQuickStart
-}) => {
+  const handleStartLearning = () => {
+    if (user) {
+      navigate('/app');
+    } else {
+      navigate('/login?next=/app');
+    }
+  };
+
+  const handleExploreCurriculum = () => {
+    if (user) {
+      navigate('/curriculum');
+    } else {
+      navigate('/login?next=/curriculum');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#fbf8f2] text-[#241e1a] selection:bg-[#c05c3c]/20">
       {/* Top Banner Navigation */}
@@ -44,17 +52,27 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         <div className="flex items-center gap-3">
           <button
-            onClick={onExploreCurriculum}
+            onClick={handleExploreCurriculum}
             className="hidden sm:inline-flex px-4 py-2 rounded-xl text-sm font-medium text-[#544942] hover:text-[#241e1a] hover:bg-amber-100/50 transition cursor-pointer"
           >
             Explore Curriculum
           </button>
-          <button
-            onClick={onStartLearning}
-            className="px-5 py-2.5 rounded-xl bg-[#c05c3c] text-white text-sm font-semibold hover:bg-[#a74728] shadow-sm transition active:scale-[0.98] cursor-pointer"
-          >
-            Start Learning
-          </button>
+
+          {user ? (
+            <Link
+              to="/app"
+              className="px-5 py-2.5 rounded-xl bg-[#c05c3c] text-white text-sm font-semibold hover:bg-[#a74728] shadow-sm transition active:scale-[0.98]"
+            >
+              Open AI Workspace
+            </Link>
+          ) : (
+            <Link
+              to="/login"
+              className="px-5 py-2.5 rounded-xl bg-[#c05c3c] text-white text-sm font-semibold hover:bg-[#a74728] shadow-sm transition active:scale-[0.98]"
+            >
+              Start Learning
+            </Link>
+          )}
         </div>
       </nav>
 
@@ -80,25 +98,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         {/* CTA Buttons */}
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
           <button
-            onClick={onStartLearning}
+            onClick={handleStartLearning}
             className="w-full sm:w-auto px-7 py-3.5 rounded-xl bg-[#c05c3c] text-white font-semibold text-base shadow-md hover:bg-[#a74728] transition flex items-center justify-center gap-2 group cursor-pointer"
           >
             <span>Start Learning</span>
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition" />
           </button>
           <button
-            onClick={onExploreCurriculum}
+            onClick={handleExploreCurriculum}
             className="w-full sm:w-auto px-7 py-3.5 rounded-xl bg-white border border-stone-300 text-[#241e1a] font-semibold text-base hover:bg-stone-50 shadow-xs transition flex items-center justify-center gap-2 cursor-pointer"
           >
             <BookOpen className="w-4 h-4 text-[#c05c3c]" />
             <span>Explore Curriculum</span>
-          </button>
-          <button
-            onClick={onQuickStart}
-            className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-[#1f4e38]/10 text-[#1f4e38] border border-[#1f4e38]/20 font-semibold text-base hover:bg-[#1f4e38]/20 transition flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>Instant Quick Start</span>
           </button>
         </div>
 
@@ -189,9 +200,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <div className="w-10 h-10 rounded-xl bg-[#d4a359]/20 text-[#93681f] flex items-center justify-center">
                 <GraduationCap className="w-5 h-5" />
               </div>
-              <h3 className="font-serif text-lg font-bold text-[#241e1a]">Weekly Assessments & XP</h3>
+              <h3 className="font-serif text-lg font-bold text-[#241e1a]">Live LLM AI Tutor</h3>
               <p className="text-xs text-[#544942] leading-relaxed">
-                Track your active streaks, earn cultural milestone badges, identify weak grammatical areas, and participate in an opt-in privacy-respecting leaderboard.
+                Real-time streaming conversation with 7 specialized pedagogical modes. Ask questions, translate, practice dialogue, and get gentle corrections.
               </p>
             </div>
           </div>
@@ -207,7 +218,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {[
             { title: 'Zero Knowledge Beginners', desc: 'Starting your very first journey into Dravidian languages and coastal culture.' },
-            { title: 'Heritage Listeners', desc: 'Grew up hearing grandparents speak Tulu, understand everything, but want the confidence to speak.' },
+            { title: 'Heritage Listeners', desc: 'Grew up hearing family speak Tulu, understand everything, but want the confidence to speak.' },
             { title: 'Travelers & Residents', desc: 'Living, studying, or working in Mangaluru, Udupi, or Manipal wishing to connect with locals.' },
             { title: 'Intermediate Speakers', desc: 'Looking to expand vocabulary, master idioms, and eliminate Kannada-influenced grammar habits.' },
           ].map((item, idx) => (
@@ -227,11 +238,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         <div className="max-w-4xl mx-auto space-y-3">
           <p className="font-serif font-bold text-base text-[#241e1a]">TuluGPT (ತುಳು ಭಾಷೆ)</p>
           <p>
-            Developed with dedication by <strong>Amrut</strong> (Developer & Co-CEO) & <strong>Anurag</strong> (Ideator & Co-CEO).
+            Developed with dedication by <strong>Amrut</strong> (Developer &amp; Co-CEO) &amp; <strong>Anurag</strong> (Ideator &amp; Co-CEO).
           </p>
-          <p className="text-[11px] text-[#776a61]">
-            Dedicated to the preservation, documentation, and digital revitalization of the Tulu language.
-          </p>
+          <div className="flex justify-center gap-4 text-[11px] pt-1">
+            <Link to="/setup-check" className="underline hover:text-[#c05c3c]">System &amp; Setup Check</Link>
+            <span>•</span>
+            <Link to="/login" className="underline hover:text-[#c05c3c]">Sign In</Link>
+          </div>
         </div>
       </footer>
     </div>

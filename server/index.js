@@ -12,6 +12,8 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const DEFAULT_MODEL = 'qwen/qwen3.8-27b';
+const GROQ_MODEL = process.env.GROQ_MODEL || DEFAULT_MODEL;
 
 app.use(cors());
 app.use(express.json());
@@ -43,47 +45,95 @@ Teaching Guidelines:
 
 Tone: Warm, encouraging, respectful of Coastal Karnataka / Tulunadu culture, culturally rich, and academically precise.`;
 
-// In-memory store for error reports when in local dev mode
-const errorReportsStore = [];
+let isModelVerified = false;
+let modelVerificationError = null;
 
+// Verify configured Groq model at startup
+async function verifyGroqModel() {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey || apiKey === 'your_groq_api_key_here') {
+    modelVerificationError = 'GROQ_API_KEY is missing or unconfigured in .env';
+    console.warn(`[TuluGPT Server Warning] ${modelVerificationError}`);
+    return;
+  }
+
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/models', {
+      headers: { 'Authorization': `Bearer ${apiKey}` }
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      modelVerificationError = `Groq API authentication failed (HTTP ${res.status}): ${errText}`;
+      console.error(`[TuluGPT Server Error] ${modelVerificationError}`);
+      return;
+    }
+
+    const data = await res.json();
+    const availableModels = (data.data || []).map(m => m.id);
+    const hasModel = availableModels.includes(GROQ_MODEL);
+
+    if (hasModel) {
+      isModelVerified = true;
+      modelVerificationError = null;
+      console.log(`[TuluGPT Groq Engine] Verified model: '${GROQ_MODEL}' is active and ready.`);
+    } else {
+      modelVerificationError = `Configured model '${GROQ_MODEL}' was not found on Groq. Available: ${availableModels.slice(0, 5).join(', ')}`;
+      console.error(`[TuluGPT Server Error] ${modelVerificationError}`);
+    }
+  } catch (err) {
+    modelVerificationError = `Network failure connecting to Groq models endpoint: ${err.message}`;
+    console.error(`[TuluGPT Server Error] ${modelVerificationError}`);
+  }
+}
+
+// Health check endpoint for /setup-check and load balancers
 app.get('/api/health', (req, res) => {
   const hasGroqKey = Boolean(process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'your_groq_api_key_here');
   res.json({
     status: 'ok',
     service: 'TuluGPT Backend Proxy',
     groqConfigured: hasGroqKey,
+    model: GROQ_MODEL,
+    modelVerified: isModelVerified,
+    modelError: modelVerificationError,
     timestamp: new Date().toISOString(),
   });
 });
 
+// SSE Streaming AI Chat Endpoint
 app.post('/api/chat', async (req, res) => {
+  const apiKey = process.env.GROQ_API_KEY;
+
+  if (!apiKey || apiKey === 'your_groq_api_key_here') {
+    return res.status(503).json({
+      error: 'GROQ_API_KEY is not configured on the server. Please add your GROQ_API_KEY in the .env file.'
+    });
+  }
+
+  const { messages, mode, userLevel, contextVocabulary } = req.body;
+
+  if (!messages || !Array.isArray(messages)) {
+    return res.status(400).json({ error: 'messages array is required' });
+  }
+
+  let contextualKnowledge = "";
+  if (contextVocabulary && Array.isArray(contextVocabulary) && contextVocabulary.length > 0) {
+    contextualKnowledge = `\n\nVERIFIED TULU KNOWLEDGE BASE FOR THIS SESSION:\n` +
+      contextVocabulary.map((v) => 
+        `- Word: ${v.word} (${v.transliteration}) | Meaning: ${v.meaning} | Category: ${v.category} | Example: ${v.example_tulu} (${v.example_english})`
+      ).join("\n");
+  }
+
+  const modePrompt = `\nCurrent Mode: ${mode || "learn"}. User Level: ${userLevel || "beginner"}.`;
+  const fullSystemPrompt = `${SYSTEM_PROMPT}${contextualKnowledge}${modePrompt}`;
+
+  const apiMessages = [
+    { role: "system", content: fullSystemPrompt },
+    ...messages.slice(-8)
+  ];
+
   try {
-    const { messages, mode, userLevel, contextVocabulary } = req.body;
-    const apiKey = process.env.GROQ_API_KEY;
-
-    if (!apiKey || apiKey === 'your_groq_api_key_here') {
-      return res.status(503).json({
-        error: 'GROQ_API_KEY is not configured on the server. Please add your GROQ_API_KEY in the .env file.',
-        fallback_available: true
-      });
-    }
-
-    let contextualKnowledge = "";
-    if (contextVocabulary && Array.isArray(contextVocabulary) && contextVocabulary.length > 0) {
-      contextualKnowledge = `\n\nVERIFIED TULU KNOWLEDGE BASE FOR THIS SESSION:\n` +
-        contextVocabulary.map((v) => 
-          `- Word: ${v.word} (${v.transliteration}) | Meaning: ${v.meaning} | Category: ${v.category} | Example: ${v.example_tulu} (${v.example_english})`
-        ).join("\n");
-    }
-
-    const modePrompt = `\nCurrent Mode: ${mode || "learn"}. User Level: ${userLevel || "beginner"}.`;
-    const fullSystemPrompt = `${SYSTEM_PROMPT}${contextualKnowledge}${modePrompt}`;
-
-    const apiMessages = [
-      { role: "system", content: fullSystemPrompt },
-      ...messages.slice(-8)
-    ];
-
     const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -91,77 +141,78 @@ app.post('/api/chat', async (req, res) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
+        model: GROQ_MODEL,
         messages: apiMessages,
         temperature: 0.2,
         max_tokens: 1024,
+        stream: true,
       }),
     });
 
     if (!groqResponse.ok) {
       const errorText = await groqResponse.text();
-      console.error('Groq API Error:', errorText);
+      console.error('[Groq API Error]:', errorText);
       return res.status(groqResponse.status).json({
-        error: 'TuluGPT is temporarily unavailable. Please try again.',
-        details: process.env.NODE_ENV === 'development' ? errorText : undefined
+        error: `Groq error (HTTP ${groqResponse.status}): ${errorText}`
       });
     }
 
-    const data = await groqResponse.json();
-    const reply = data.choices?.[0]?.message?.content || "Solmelu! I am processing your Tulu query.";
+    // Set Server-Sent Events headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
 
-    return res.json({
-      content: reply,
-      model: data.model,
-      usage: data.usage
-    });
+    const reader = groqResponse.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith(':')) continue;
+
+        if (trimmed === 'data: [DONE]') {
+          res.write('data: [DONE]\n\n');
+          continue;
+        }
+
+        if (trimmed.startsWith('data: ')) {
+          try {
+            const parsed = JSON.parse(trimmed.slice(6));
+            const deltaContent = parsed.choices?.[0]?.delta?.content;
+            if (deltaContent) {
+              res.write(`data: ${JSON.stringify({ content: deltaContent })}\n\n`);
+            }
+          } catch (e) {
+            // ignore non-json chunk
+          }
+        }
+      }
+    }
+
+    res.write('data: [DONE]\n\n');
+    res.end();
   } catch (err) {
-    console.error('Server error in /api/chat:', err);
-    return res.status(500).json({
-      error: 'TuluGPT encountered an internal service error. Please try again later.'
-    });
+    console.error('[Server error in /api/chat stream]:', err);
+    if (!res.headersSent) {
+      return res.status(500).json({ error: `Server streaming error: ${err.message}` });
+    } else {
+      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+      res.end();
+    }
   }
 });
 
-app.post('/api/report-error', (req, res) => {
-  const { messageId, userId, username, reason, description, userInput, aiResponse } = req.body;
-  const newReport = {
-    id: `err-${Date.now()}`,
-    message_id: messageId,
-    user_id: userId || 'anonymous',
-    username: username || 'Learner',
-    reason: reason || 'other',
-    description: description || '',
-    user_input: userInput,
-    ai_response: aiResponse,
-    status: 'reported',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-
-  errorReportsStore.unshift(newReport);
-  console.log('[Tulu Error Reported]:', newReport);
-
-  res.json({ success: true, report: newReport });
-});
-
-app.get('/api/reports', (req, res) => {
-  res.json({ reports: errorReportsStore });
-});
-
-app.patch('/api/reports/:id', (req, res) => {
-  const { id } = req.params;
-  const { status, adminNotes } = req.body;
-  const report = errorReportsStore.find(r => r.id === id);
-  if (!report) {
-    return res.status(404).json({ error: 'Report not found' });
-  }
-  if (status) report.status = status;
-  if (adminNotes !== undefined) report.admin_notes = adminNotes;
-  report.updated_at = new Date().toISOString();
-  res.json({ success: true, report });
-});
-
-app.listen(PORT, () => {
+// Start verification and server
+app.listen(PORT, async () => {
   console.log(`[TuluGPT Backend Server] Running on http://localhost:${PORT}`);
+  await verifyGroqModel();
 });
